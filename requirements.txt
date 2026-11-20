@@ -1,0 +1,28 @@
+# Web Framework
+Flask==3.0.0
+Werkzeug==3.0.1
+
+# SSH Server (Phase 2)
+paramiko==3.4.0
+cryptography==41.0.7
+
+# Database
+# SQLite is built-in to Python
+
+# IP Enrichment (Phase 3)
+geoip2==4.8.0
+maxminddb==2.5.1
+
+# Password Hashing
+bcrypt==4.1.2
+
+# Environment Config
+python-dotenv==1.0.0
+
+# Utilities
+requests==2.31.0
+
+# Development/Testing
+pytest==7.4.3
+pytest-cov==4.1.0
+requests-mock==1.11.0

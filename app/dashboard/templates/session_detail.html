@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Session Detail - Honeypot Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 40px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .nav {
+            margin-bottom: 30px;
+        }
+
+        .nav a {
+            display: inline-block;
+            padding: 10px 20px;
+            margin-right: 10px;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+        }
+
+        .section {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .section h2 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 200px 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #666;
+        }
+
+        .info-value {
+            color: #333;
+        }
+
+        .command-log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin-bottom: 10px;
+        }
+
+        .command-log .prompt {
+            color: #4ec9b0;
+        }
+
+        .command-log .command {
+            color: #dcdcaa;
+        }
+
+        .command-log .output {
+            color: #ce9178;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 5px;
+        }
+
+        .badge-recon {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-download {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-exploit {
+            background: #f5c6cb;
+            color: #721c24;
+        }
+
+        .badge-sqli {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-xss {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-lfi {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        table th {
+            text-align: left;
+            padding: 12px;
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #dee2e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 Session Detail</h1>
+        <p>Complete activity log for session {{ session.session_id[:8] }}...</p>
+    </div>
+
+    <div class="container">
+        <div class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/sessions">Sessions</a>
+        </div>
+
+        <div class="section">
+            <h2>Session Information</h2>
+            <div class="info-grid">
+                <div class="info-label">Session ID:</div>
+                <div class="info-value"><code>{{ session.session_id }}</code></div>
+
+                <div class="info-label">Source IP:</div>
+                <div class="info-value"><strong>{{ session.source_ip }}</strong></div>
+
+                <div class="info-label">Source Port:</div>
+                <div class="info-value">{{ session.source_port }}</div>
+
+                <div class="info-label">Protocol:</div>
+                <div class="info-value">{{ session.protocol|upper }}</div>
+
+                <div class="info-label">Started At:</div>
+                <div class="info-value">{{ session.started_at }}</div>
+
+                <div class="info-label">Ended At:</div>
+                <div class="info-value">{{ session.ended_at or 'Active' }}</div>
+
+                <div class="info-label">Duration:</div>
+                <div class="info-value">
+                    {% if session.duration_seconds %}
+                    {{ "%.2f"|format(session.duration_seconds) }} seconds
+                    {% else %}
+                    -
+                    {% endif %}
+                </div>
+
+                {% if session.user_agent %}
+                <div class="info-label">User-Agent:</div>
+                <div class="info-value"><code>{{ session.user_agent }}</code></div>
+                {% endif %}
+
+                {% if session.ssh_client_version %}
+                <div class="info-label">SSH Client:</div>
+                <div class="info-value"><code>{{ session.ssh_client_version }}</code></div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if session.auth_attempts %}
+        <div class="section">
+            <h2>Authentication Attempts ({{ session.auth_attempts|length }})</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Username</th>
+                        <th>Method</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for auth in session.auth_attempts %}
+                    <tr>
+                        <td>{{ auth.timestamp }}</td>
+                        <td><strong>{{ auth.username }}</strong></td>
+                        <td>{{ auth.auth_method }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        {% if session.interactions %}
+        <div class="section">
+            <h2>Interactions ({{ session.interactions|length }})</h2>
+
+            {% for interaction in session.interactions %}
+                {% if interaction.interaction_type == 'ssh_command' %}
+                <div class="command-log">
+                    <div>
+                        <span class="prompt">ubuntu@prod-db-01:~$</span>
+                        <span class="command">{{ interaction.command }}</span>
+                        {% if interaction.command_classification %}
+                        <span class="badge badge-{{ interaction.command_classification }}">{{ interaction.command_classification }}</span>
+                        {% endif %}
+                    </div>
+                    {% if interaction.fake_output %}
+                    <div class="output">{{ interaction.fake_output }}</div>
+                    {% endif %}
+                </div>
+                {% elif interaction.interaction_type == 'http_request' %}
+                <div style="margin-bottom: 15px; padding: 15px; background: #f8f9fa; border-left: 4px solid #667eea;">
+                    <div><strong>{{ interaction.http_method }}</strong> {{ interaction.http_path }}</div>
+                    {% if interaction.attack_signature and interaction.attack_signature != 'benign' %}
+                    <div style="margin-top: 5px;">
+                        <span class="badge badge-{{ interaction.attack_signature }}">{{ interaction.attack_signature }}</span>
+                    </div>
+                    {% endif %}
+                    <div style="font-size: 12px; color: #666; margin-top: 5px;">{{ interaction.timestamp }}</div>
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

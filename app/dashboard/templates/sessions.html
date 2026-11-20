@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sessions - Honeypot Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 40px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .nav {
+            margin-bottom: 30px;
+        }
+
+        .nav a {
+            display: inline-block;
+            padding: 10px 20px;
+            margin-right: 10px;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .nav a:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .section {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .section h2 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        table th {
+            text-align: left;
+            padding: 12px;
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-http {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .badge-ssh {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .badge-active {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .badge-ended {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .session-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .session-link:hover {
+            text-decoration: underline;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 14px;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🍯 Attack Sessions</h1>
+        <p>Detailed session logs from captured connections</p>
+    </div>
+
+    <div class="container">
+        <div class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/sessions">Sessions</a>
+        </div>
+
+        <div class="section">
+            <h2>Recent Sessions</h2>
+            {% if sessions %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Session ID</th>
+                        <th>Source IP</th>
+                        <th>Protocol</th>
+                        <th>Started At</th>
+                        <th>Duration</th>
+                        <th>Interactions</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for session in sessions %}
+                    <tr>
+                        <td>
+                            <a href="/session/{{ session.session_id }}" class="session-link">
+                                {{ session.session_id[:8] }}...
+                            </a>
+                        </td>
+                        <td><strong>{{ session.source_ip }}</strong></td>
+                        <td>
+                            {% if session.protocol == 'http' %}
+                            <span class="badge badge-http">HTTP</span>
+                            {% else %}
+                            <span class="badge badge-ssh">SSH</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ session.started_at }}</td>
+                        <td>
+                            {% if session.duration_seconds %}
+                            {{ "%.1f"|format(session.duration_seconds) }}s
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td>{{ session.total_interactions }}</td>
+                        <td>
+                            {% if session.ended_at %}
+                            <span class="badge badge-ended">Ended</span>
+                            {% else %}
+                            <span class="badge badge-active">Active</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p>No sessions recorded yet. Start the honeypot to capture attacker activity.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>🍯 Network Honeypot Dashboard</p>
+    </div>
+</body>
+</html>
