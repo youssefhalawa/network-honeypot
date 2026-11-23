@@ -1,217 +1,59 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sessions - Honeypot Dashboard</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+{% extends 'base.html' %}
+{% block title %}Sessions - Honeypot Dashboard{% endblock %}
+{% macro sort_link(column, text) %}
+    {% set next_order = 'asc' if (sort == column and order == 'desc') else 'desc' %}
+    <a href="{{ link(sort=column, order=next_order, page=1) }}">{{ text }}{% if sort == column %} {{ '▼' if order == 'desc' else '▲' }}{% endif %}</a>
+{% endmacro %}
+{% block content %}
+<div class="filters" style="margin-bottom:16px">
+    <a href="{{ link(protocol='', page=1) }}" class="{{ 'on' if not protocol }}">All</a>
+    <a href="{{ link(protocol='ssh', page=1) }}" class="{{ 'on' if protocol == 'ssh' }}">SSH</a>
+    <a href="{{ link(protocol='http', page=1) }}" class="{{ 'on' if protocol == 'http' }}">HTTP</a>
+    <span class="muted" style="margin-left:10px">{{ total }} sessions · page {{ page }} of {{ pages }}</span>
+</div>
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f5f5f5;
-            color: #333;
-        }
+<div class="card">
+    {% if sessions %}
+    <table>
+        <thead>
+            <tr>
+                <th>Session</th>
+                <th>{{ sort_link('started_at', 'Started (UTC)') }}</th>
+                <th>{{ sort_link('source_ip', 'Source IP') }}</th>
+                <th>Country</th>
+                <th>{{ sort_link('protocol', 'Protocol') }}</th>
+                <th>{{ sort_link('duration_seconds', 'Duration') }}</th>
+                <th>{{ sort_link('total_interactions', 'Actions') }}</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in sessions %}
+            <tr>
+                <td class="mono"><a href="/session/{{ s.session_id }}">{{ s.session_id[:8] }}…</a></td>
+                <td>{{ s.started_at|short_time }}</td>
+                <td class="mono">{{ s.source_ip }}:{{ s.source_port }}</td>
+                <td>{{ s.country_code or '-' }}</td>
+                <td><span class="badge badge-{{ s.protocol }}">{{ s.protocol|upper }}</span></td>
+                <td>{{ s.duration_seconds|duration }}</td>
+                <td>{{ s.total_interactions }}</td>
+                <td>{% if s.ended_at %}<span class="badge badge-ended">Ended</span>{% else %}<span class="badge badge-active">Active</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No sessions yet. Start the honeypot and run scripts/simulate_attacks.py to generate some.</p>
+    {% endif %}
+</div>
 
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px 40px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-
-        .header h1 {
-            font-size: 28px;
-            font-weight: 600;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-
-        .nav {
-            margin-bottom: 30px;
-        }
-
-        .nav a {
-            display: inline-block;
-            padding: 10px 20px;
-            margin-right: 10px;
-            background: white;
-            color: #667eea;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-
-        .nav a:hover {
-            background: #667eea;
-            color: white;
-        }
-
-        .section {
-            background: white;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        }
-
-        .section h2 {
-            font-size: 20px;
-            margin-bottom: 20px;
-            color: #333;
-            border-bottom: 2px solid #667eea;
-            padding-bottom: 10px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        table th {
-            text-align: left;
-            padding: 12px;
-            background: #f8f9fa;
-            font-weight: 600;
-            color: #555;
-            border-bottom: 2px solid #dee2e6;
-        }
-
-        table td {
-            padding: 12px;
-            border-bottom: 1px solid #dee2e6;
-        }
-
-        table tr:hover {
-            background: #f8f9fa;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .badge-http {
-            background: #e3f2fd;
-            color: #1976d2;
-        }
-
-        .badge-ssh {
-            background: #f3e5f5;
-            color: #7b1fa2;
-        }
-
-        .badge-active {
-            background: #e8f5e9;
-            color: #388e3c;
-        }
-
-        .badge-ended {
-            background: #ffebee;
-            color: #c62828;
-        }
-
-        .session-link {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
-        }
-
-        .session-link:hover {
-            text-decoration: underline;
-        }
-
-        .footer {
-            text-align: center;
-            padding: 20px;
-            color: #666;
-            font-size: 14px;
-            margin-top: 40px;
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>🍯 Attack Sessions</h1>
-        <p>Detailed session logs from captured connections</p>
-    </div>
-
-    <div class="container">
-        <div class="nav">
-            <a href="/">Dashboard</a>
-            <a href="/sessions">Sessions</a>
-        </div>
-
-        <div class="section">
-            <h2>Recent Sessions</h2>
-            {% if sessions %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Session ID</th>
-                        <th>Source IP</th>
-                        <th>Protocol</th>
-                        <th>Started At</th>
-                        <th>Duration</th>
-                        <th>Interactions</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for session in sessions %}
-                    <tr>
-                        <td>
-                            <a href="/session/{{ session.session_id }}" class="session-link">
-                                {{ session.session_id[:8] }}...
-                            </a>
-                        </td>
-                        <td><strong>{{ session.source_ip }}</strong></td>
-                        <td>
-                            {% if session.protocol == 'http' %}
-                            <span class="badge badge-http">HTTP</span>
-                            {% else %}
-                            <span class="badge badge-ssh">SSH</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ session.started_at }}</td>
-                        <td>
-                            {% if session.duration_seconds %}
-                            {{ "%.1f"|format(session.duration_seconds) }}s
-                            {% else %}
-                            -
-                            {% endif %}
-                        </td>
-                        <td>{{ session.total_interactions }}</td>
-                        <td>
-                            {% if session.ended_at %}
-                            <span class="badge badge-ended">Ended</span>
-                            {% else %}
-                            <span class="badge badge-active">Active</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p>No sessions recorded yet. Start the honeypot to capture attacker activity.</p>
-            {% endif %}
-        </div>
-    </div>
-
-    <div class="footer">
-        <p>🍯 Network Honeypot Dashboard</p>
-    </div>
-</body>
-</html>
+{% if pages > 1 %}
+<div class="pager">
+    {% if page > 1 %}<a href="{{ link(page=page-1) }}">← Previous</a>{% endif %}
+    {% for p in range([1, page-3]|max, [pages, page+3]|min + 1) %}
+        {% if p == page %}<span class="on">{{ p }}</span>{% else %}<a href="{{ link(page=p) }}">{{ p }}</a>{% endif %}
+    {% endfor %}
+    {% if page < pages %}<a href="{{ link(page=page+1) }}">Next →</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

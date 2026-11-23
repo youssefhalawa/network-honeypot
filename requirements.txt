@@ -1,28 +1,25 @@
-# Web Framework
-Flask==3.0.0
-Werkzeug==3.0.1
+# Tested with Python 3.9 - 3.13
 
-# SSH Server (Phase 2)
-paramiko==3.4.0
-cryptography==41.0.7
+# Web framework (HTTP decoy + dashboard)
+Flask>=3.0,<4
+Werkzeug>=3.0,<4
 
-# Database
-# SQLite is built-in to Python
+# SSH decoy
+paramiko>=3.4,<6
+cryptography>=41
 
-# IP Enrichment (Phase 3)
-geoip2==4.8.0
-maxminddb==2.5.1
+# IP enrichment (works offline without the .mmdb files)
+geoip2>=4.8,<6
+maxminddb>=2.5
 
-# Password Hashing
-bcrypt==4.1.2
+# Password hashing (passwords are never stored in plain text)
+bcrypt>=4.1,<6
 
-# Environment Config
-python-dotenv==1.0.0
+# Settings from .env
+python-dotenv>=1.0
 
-# Utilities
-requests==2.31.0
+# Attack simulator
+requests>=2.31
 
-# Development/Testing
-pytest==7.4.3
-pytest-cov==4.1.0
-requests-mock==1.11.0
+# Tests
+pytest>=7.4

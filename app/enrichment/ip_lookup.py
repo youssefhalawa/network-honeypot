@@ -1,123 +1,107 @@
 """
-IP Intelligence and Enrichment Module
-Provides GeoIP lookup and threat intelligence with offline fallback
+IP Intelligence and Enrichment (Member 5)
+
+* GeoIP lookup with MaxMind GeoLite2 City (+ optional ASN database)
+* Private / reserved addresses are labelled without a lookup
+* Works offline: if the .mmdb files are missing, IPs are stored as 'OFFLINE'
+* enrich_and_store(ip) is what the decoys call for every new session.
+  Results are cached in the ip_intel table for IP_INTEL_CACHE_HOURS.
 """
 import ipaddress
-from typing import Dict, Optional
-from pathlib import Path
+import logging
+import threading
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, Optional
 
 try:
     import geoip2.database
     import geoip2.errors
     GEOIP_AVAILABLE = True
-except ImportError:
+except ImportError:  # library not installed
     GEOIP_AVAILABLE = False
+
+log = logging.getLogger('honeypot.enrichment')
 
 
 class IPEnricher:
-    """
-    Enriches IP addresses with geographical and network information
-    Handles private/reserved IPs gracefully with offline fallback
-    """
+    """Enriches IP addresses with location and network information."""
 
-    def __init__(self, mmdb_path: str = 'data/GeoLite2-City.mmdb'):
+    def __init__(self, mmdb_path: str = 'data/GeoLite2-City.mmdb', asn_mmdb_path: Optional[str] = None):
         self.mmdb_path = mmdb_path
         self.reader = None
+        self.asn_reader = None
         self.geoip_available = False
 
-        if GEOIP_AVAILABLE and Path(mmdb_path).exists():
+        if not GEOIP_AVAILABLE:
+            log.warning('geoip2 library not installed - IP enrichment runs in offline mode')
+            return
+
+        if Path(mmdb_path).exists():
             try:
                 self.reader = geoip2.database.Reader(mmdb_path)
                 self.geoip_available = True
-                print(f"[✓] GeoIP database loaded: {mmdb_path}")
-            except Exception as e:
-                print(f"[!] Failed to load GeoIP database: {e}")
+                log.info('GeoIP database loaded: %s', mmdb_path)
+            except Exception as exc:
+                log.warning('Failed to load GeoIP database %s: %s', mmdb_path, exc)
         else:
-            if not GEOIP_AVAILABLE:
-                print("[!] geoip2 library not installed - enrichment disabled")
-            else:
-                print(f"[!] GeoIP database not found at {mmdb_path}")
-                print("[!] Download from: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data")
+            log.warning('GeoIP database not found at %s - run scripts/setup_geoip.sh (offline mode for now)',
+                        mmdb_path)
+
+        if asn_mmdb_path and Path(asn_mmdb_path).exists():
+            try:
+                self.asn_reader = geoip2.database.Reader(asn_mmdb_path)
+            except Exception as exc:
+                log.warning('Failed to load ASN database %s: %s', asn_mmdb_path, exc)
 
     def enrich(self, ip: str) -> Dict:
-        """
-        Enrich IP address with all available intelligence
-
-        Args:
-            ip: IP address string
-
-        Returns:
-            Dictionary with enrichment data
-        """
         result = {
             'ip_address': ip,
             'last_updated': datetime.now(timezone.utc).isoformat(),
             'is_private': self._is_private(ip),
             'is_reserved': self._is_reserved(ip),
-            'country_code': None,
-            'country_name': None,
-            'city': None,
-            'latitude': None,
-            'longitude': None,
-            'asn': None,
-            'asn_org': None,
+            'country_code': None, 'country_name': None, 'city': None,
+            'latitude': None, 'longitude': None, 'asn': None, 'asn_org': None,
+            'is_tor': False, 'is_vpn': False,
         }
 
-        # Handle private/reserved IPs
-        if result['is_private']:
-            result['country_code'] = 'PRIVATE'
-            result['country_name'] = 'Private Network (RFC1918)'
-            return result
-
+        # Reserved first: loopback (127.0.0.1) is also "private" in Python's ipaddress
         if result['is_reserved']:
-            result['country_code'] = 'RESERVED'
-            result['country_name'] = 'Reserved IP Space'
+            result.update(country_code='RESERVED', country_name='Reserved / Loopback')
+            return result
+        if result['is_private']:
+            result.update(country_code='PRIVATE', country_name='Private Network (RFC1918)')
             return result
 
-        # Try GeoIP lookup for public IPs
         if self.geoip_available and self.reader:
             try:
                 response = self.reader.city(ip)
-
-                result.update({
-                    'country_code': response.country.iso_code,
-                    'country_name': response.country.name,
-                    'city': response.city.name,
-                    'latitude': response.location.latitude,
-                    'longitude': response.location.longitude,
-                })
-
-                # Try to get ASN info if available
-                if hasattr(response, 'traits') and hasattr(response.traits, 'autonomous_system_number'):
-                    result['asn'] = response.traits.autonomous_system_number
-                    result['asn_org'] = response.traits.autonomous_system_organization
-
+                result.update(
+                    country_code=response.country.iso_code or 'UNKNOWN',
+                    country_name=response.country.name or 'Unknown',
+                    city=response.city.name,
+                    latitude=response.location.latitude,
+                    longitude=response.location.longitude,
+                )
             except geoip2.errors.AddressNotFoundError:
-                result['country_code'] = 'UNKNOWN'
-                result['country_name'] = 'Unknown'
-            except Exception as e:
-                print(f"[!] GeoIP lookup error for {ip}: {e}")
-                result['country_code'] = 'ERROR'
-                result['country_name'] = 'Lookup Error'
+                result.update(country_code='UNKNOWN', country_name='Unknown')
+            except Exception as exc:
+                log.warning('GeoIP lookup error for %s: %s', ip, exc)
+                result.update(country_code='ERROR', country_name='Lookup Error')
         else:
-            # Offline mode - no enrichment available
-            result['country_code'] = 'OFFLINE'
-            result['country_name'] = 'GeoIP Unavailable'
+            result.update(country_code='OFFLINE', country_name='GeoIP Unavailable')
+
+        if self.asn_reader:
+            try:
+                asn = self.asn_reader.asn(ip)
+                result.update(asn=asn.autonomous_system_number, asn_org=asn.autonomous_system_organization)
+            except Exception:
+                pass
 
         return result
 
     @staticmethod
     def _is_private(ip: str) -> bool:
-        """
-        Check if IP is RFC1918 private address
-
-        Args:
-            ip: IP address string
-
-        Returns:
-            True if private, False otherwise
-        """
         try:
             return ipaddress.ip_address(ip).is_private
         except ValueError:
@@ -125,63 +109,54 @@ class IPEnricher:
 
     @staticmethod
     def _is_reserved(ip: str) -> bool:
-        """
-        Check if IP is reserved (loopback, link-local, multicast, etc.)
-
-        Args:
-            ip: IP address string
-
-        Returns:
-            True if reserved, False otherwise
-        """
         try:
             addr = ipaddress.ip_address(ip)
-            return (addr.is_loopback or
-                    addr.is_link_local or
-                    addr.is_multicast or
-                    addr.is_reserved)
+            return addr.is_loopback or addr.is_link_local or addr.is_multicast or addr.is_reserved \
+                or addr.is_unspecified
         except ValueError:
             return False
 
-    @staticmethod
-    def is_tor_exit(ip: str) -> bool:
-        """
-        Check if IP is known Tor exit node
-        This is a placeholder - implement with Tor exit list API
-
-        Args:
-            ip: IP address string
-
-        Returns:
-            True if Tor exit node, False otherwise
-        """
-        # TODO: Implement Tor exit node check
-        # Could use https://check.torproject.org/torbulkexitlist
-        return False
-
-    @staticmethod
-    def is_vpn(ip: str) -> bool:
-        """
-        Check if IP is known VPN/proxy
-        This is a placeholder - implement with VPN detection service
-
-        Args:
-            ip: IP address string
-
-        Returns:
-            True if VPN/proxy, False otherwise
-        """
-        # TODO: Implement VPN detection
-        # Could use commercial services or maintain VPN IP list
-        return False
-
     def close(self):
-        """Close GeoIP database reader"""
-        if self.reader:
-            self.reader.close()
+        for reader in (self.reader, self.asn_reader):
+            if reader:
+                reader.close()
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
+
+
+# ---------------------------------------------------------------------------
+# Shared enricher + the function the decoys call
+# ---------------------------------------------------------------------------
+_enricher: Optional[IPEnricher] = None
+_enricher_lock = threading.Lock()
+
+
+def get_enricher() -> IPEnricher:
+    global _enricher
+    with _enricher_lock:
+        if _enricher is None:
+            from app.core.config import Config
+            _enricher = IPEnricher(Config.GEOIP_DB_PATH, Config.GEOIP_ASN_DB_PATH)
+        return _enricher
+
+
+def enrich_and_store(db, ip: str, cache_hours: Optional[int] = None) -> Optional[Dict]:
+    """Look up `ip` (unless cached recently) and save it in ip_intel.
+    Never raises: enrichment problems must not break a decoy."""
+    try:
+        if cache_hours is None:
+            from app.core.config import Config
+            cache_hours = Config.IP_INTEL_CACHE_HOURS
+        if db.ip_intel_is_fresh(ip, cache_hours):
+            db.record_ip_seen(ip)
+            return db.get_ip_intel(ip)
+        intel = get_enricher().enrich(ip)
+        db.upsert_ip_intel(intel)
+        return intel
+    except Exception as exc:
+        log.warning('IP enrichment failed for %s: %s', ip, exc)
+        return None

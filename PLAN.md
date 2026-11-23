@@ -28,7 +28,7 @@ Build a production-grade SSH/HTTP honeypot in Python that captures attacker cred
 - MITRE ATT&CK technique tagging
 
 **Success Criteria:**
-- SSH client can connect, attempt auth (always fails), see fake shell
+- SSH client can connect, attempt auth (rejected unless a weak password is used), weak passwords see the fake shell
 - Commands like `whoami`, `uname -a` return realistic fake output
 - All commands logged to interactions table with classification
 

@@ -53,6 +53,7 @@ host_rsa_key*
 *.swo
 *~
 .DS_Store
+.claude/
 
 # Testing
 .pytest_cache/

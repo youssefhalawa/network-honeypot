@@ -70,12 +70,14 @@ Every attacker interaction is tied to a session UUID, allowing us to reconstruct
 1. Attacker attempts SSH authentication
 2. Paramiko's `check_auth_password()` callback is triggered
 3. Honeypot logs username and hashed password
-4. Authentication always returns `AUTH_FAILED`
+4. If the pair is in `SSH_ACCEPTED_CREDENTIALS` (weak passwords like `root/root`) it returns
+   `AUTH_SUCCESSFUL` and the attacker reaches the fake shell; everything else returns `AUTH_FAILED`.
+   This is what lets the honeypot record post-login commands (assignment Phase 3).
 
 **Code Location:**
 - HTTP: `app/decoy_http/server.py` - `@app.route('/login', methods=['POST'])`
 - SSH: `app/decoy_ssh/server.py` - `SSHServer.check_auth_password()`
-- Password hashing: Both use `bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())`
+- Password hashing: Both use `bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=10))`
 
 **Database Impact:**
 ```sql

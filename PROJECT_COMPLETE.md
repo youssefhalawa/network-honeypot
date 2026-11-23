@@ -44,7 +44,7 @@ honeypot/
 ├── 🧪 Testing & Simulation (3 scripts)
 │   ├── scripts/test_honeypot.py     # Basic verification
 │   ├── scripts/simulate_attacks.py  # Comprehensive attack sim
-│   └── setup.py                     # One-command setup
+│   └── install.py                   # One-command setup
 │
 ├── 📚 Documentation (6 files)
 │   ├── README.md                    # Complete project guide
@@ -68,7 +68,7 @@ Total: 31 files across all phases
 
 ### 1. Setup (One Command)
 ```bash
-python setup.py
+python install.py
 ```
 
 ### 2. Run Honeypot
@@ -285,7 +285,7 @@ This project demonstrates:
 ### Immediate (Ready Now)
 ```bash
 # 1. Run setup
-python setup.py
+python install.py
 
 # 2. Start honeypot
 python -m app.main
