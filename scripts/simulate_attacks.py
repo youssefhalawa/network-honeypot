@@ -194,6 +194,11 @@ class Simulator:
 
 
 def main():
+    # Redirected output on Windows defaults to cp1252, which cannot encode the
+    # emoji in the header. Force UTF-8 so the script also works when piped or logged.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description='Send simulated attacks to your own honeypot')
     parser.add_argument('--http', default='http://127.0.0.1:8080', help='HTTP decoy URL')
     parser.add_argument('--ssh-host', default='127.0.0.1')

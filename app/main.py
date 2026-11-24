@@ -57,7 +57,14 @@ def setup_logging():
 
 def port_is_free(host: str, port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if sys.platform == 'win32':
+            # On Windows SO_REUSEADDR lets another socket bind a port that is
+            # already in use, so this probe would report a busy port as free
+            # and a second honeypot would start silently. Exclusive mode makes
+            # bind() fail when the port is really taken.
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             probe.bind((host, port))
             return True
@@ -167,25 +174,30 @@ def shutdown(db, manager, threads):
 def print_banner():
     line = '=' * 60
     print(line)
-    print('🍯 Network Honeypot - SSH/HTTP Decoy System')
+    print('  Network Honeypot - SSH/HTTP Decoy System')
     print(line)
     if Config.HTTP_DECOY_ENABLED:
-        print(f'  • HTTP decoy:  http://{Config.HTTP_HOST}:{Config.HTTP_PORT}')
+        print(f'  - HTTP decoy:  http://{Config.HTTP_HOST}:{Config.HTTP_PORT}')
     if Config.SSH_DECOY_ENABLED:
-        print(f'  • SSH decoy:   ssh -p {Config.SSH_PORT} root@{Config.SSH_HOST}')
+        print(f'  - SSH decoy:   ssh -p {Config.SSH_PORT} root@{Config.SSH_HOST}')
     if Config.DASHBOARD_ENABLED:
-        print(f'  • Dashboard:   http://{Config.DASHBOARD_HOST}:{Config.DASHBOARD_PORT}')
-    print(f'  • Database:    {Config.DATABASE_PATH}')
-    print(f'  • Limits:      {Config.MAX_CONCURRENT_SESSIONS} sessions, idle {Config.SESSION_IDLE_TIMEOUT_SECONDS}s, '
+        print(f'  - Dashboard:   http://{Config.DASHBOARD_HOST}:{Config.DASHBOARD_PORT}')
+    print(f'  - Database:    {Config.DATABASE_PATH}')
+    print(f'  - Limits:      {Config.MAX_CONCURRENT_SESSIONS} sessions, idle {Config.SESSION_IDLE_TIMEOUT_SECONDS}s, '
           f'max {Config.SESSION_MAX_DURATION_SECONDS}s')
     print(line)
-    print('⚠️  Only deploy on networks you own or are authorized to monitor.')
+    print('[!] Only deploy on networks you own or are authorized to monitor.')
     print('   Run it isolated (DMZ/VLAN) and block outgoing traffic (see README).')
     print('Press Ctrl+C to stop')
     print(line)
 
 
 def main():
+    # Redirected output on Windows defaults to the legacy code page (cp1252),
+    # which cannot encode the banner emoji and would crash start-up. Force UTF-8.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     try:
         Config.validate()
     except ValueError as exc:
@@ -223,6 +235,8 @@ def main():
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
+    if hasattr(signal, 'SIGBREAK'):      # Windows Ctrl+Break (also used by service stop)
+        signal.signal(signal.SIGBREAK, handle_signal)
 
     threads = [ServiceThread(name, target, stop_event) for name, target in services]
     for thread in threads:

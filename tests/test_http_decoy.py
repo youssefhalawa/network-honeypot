@@ -29,7 +29,7 @@ def last_interaction():
 def test_login_page_is_served(client):
     r = client.get('/')
     assert r.status_code == 200
-    assert b'Acme Corp' in r.data and b'name="password"' in r.data
+    assert b'DEPI GPT' in r.data and b'name="password"' in r.data
 
 
 def test_server_header_pretends_to_be_apache(client):

@@ -17,6 +17,7 @@ import logging
 import os
 import random
 import socket
+import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -340,7 +341,13 @@ def run_ssh_decoy(stop_event: Optional[threading.Event] = None):
     host_key = load_host_key()
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    if sys.platform == 'win32':
+        # On Windows SO_REUSEADDR lets a second process bind the same port, so
+        # two decoys would silently split incoming connections. Exclusive mode
+        # makes the second bind fail with a clear "port in use" error.
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    else:
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         server_socket.bind((Config.SSH_HOST, Config.SSH_PORT))
     except OSError as exc:

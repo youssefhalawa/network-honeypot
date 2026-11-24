@@ -167,13 +167,12 @@ def test_idle_session_is_logged_out(attack):
 
 def test_idle_loop_does_not_burn_cpu(attack):
     """The old loop spun at 100% CPU while waiting for input."""
-    import resource
     client = attack()
     client.invoke_shell()
     time.sleep(0.5)
-    before = resource.getrusage(resource.RUSAGE_SELF).ru_utime
+    before = time.process_time()
     time.sleep(2)
-    used = resource.getrusage(resource.RUSAGE_SELF).ru_utime - before
+    used = time.process_time() - before
     assert used < 0.5, f'used {used:.2f}s of CPU in 2s while idle'
 
 
@@ -182,7 +181,7 @@ def test_idle_loop_does_not_burn_cpu(attack):
 def test_shell_never_runs_real_commands():
     """No code in app/ can start a process or evaluate attacker text."""
     import re
-    source = '\n'.join(p.read_text() for p in (ROOT / 'app').rglob('*.py'))
+    source = '\n'.join(p.read_text(encoding='utf-8') for p in (ROOT / 'app').rglob('*.py'))
     for pattern in (r'\bsubprocess\b', r'\bos\.(system|popen|exec\w*|spawn\w*)\b', r'(?<![\w.])eval\(',
                     r'(?<![\w.])exec\(', r'\bpty\.spawn\b', r'\bimport\s+pty\b'):
         assert not re.search(pattern, source), pattern

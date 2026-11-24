@@ -2,6 +2,7 @@
 Tests for Member 1: configuration, sessions, start-up and shutdown.
 """
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -191,8 +192,10 @@ def test_honeypot_starts_and_stops_cleanly(tmp_path):
     from conftest import free_port
     env = {**os.environ, 'DATABASE_PATH': str(tmp_path / 'run.db'), 'HTTP_PORT': str(free_port()),
            'SSH_PORT': str(free_port()), 'LOG_FILE': str(tmp_path / 'run.log')}
+    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0
     proc = subprocess.Popen([sys.executable, '-m', 'app.main'], cwd=ROOT, env=env,
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                            encoding='utf-8', errors='replace', creationflags=creationflags)
     try:
         deadline = time.time() + 20
         while time.time() < deadline:
@@ -203,7 +206,10 @@ def test_honeypot_starts_and_stops_cleanly(tmp_path):
                 time.sleep(0.2)
         import urllib.request
         urllib.request.urlopen(f"http://127.0.0.1:{env['HTTP_PORT']}/").read()
-        proc.send_signal(2)  # SIGINT = Ctrl+C
+        if sys.platform == 'win32':
+            proc.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            proc.send_signal(2)  # SIGINT = Ctrl+C
         output, _ = proc.communicate(timeout=20)
     finally:
         if proc.poll() is None:
@@ -224,6 +230,6 @@ def test_port_in_use_stops_with_clear_message(tmp_path):
         env = {**os.environ, 'DATABASE_PATH': str(tmp_path / 'run.db'), 'HTTP_PORT': str(port),
                'SSH_PORT': str(free_port()), 'LOG_FILE': str(tmp_path / 'run.log')}
         result = subprocess.run([sys.executable, '-m', 'app.main'], cwd=ROOT, env=env, capture_output=True,
-                                text=True, timeout=30)
+                                text=True, encoding='utf-8', errors='replace', timeout=30)
     assert result.returncode == 1
     assert f'port {port} is already in use' in result.stdout + result.stderr

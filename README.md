@@ -47,7 +47,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    ATTACKER / INTERNET                       │
+│                    ATTACKER / INTERNET                      │
 └──────────┬──────────────────────┬───────────────────────────┘
            │                      │
            ▼                      ▼
@@ -81,10 +81,10 @@
                      │
         ┌────────────┴────────────┐
         ▼                         ▼
-┌──────────────┐        ┌──────────────┐
-│  Dashboard   │        │     API      │
-│ (Port 5000)  │        │  /api/stats  │
-└──────────────┘        └──────────────┘
+ ┌──────────────┐          ┌──────────────┐
+ │  Dashboard   │          │     API      │
+ │ (Port 5000)  │          │  /api/stats  │
+ └──────────────┘          └──────────────┘
 ```
 
 ---
@@ -480,7 +480,7 @@ MIT License - See LICENSE file
 
 ## 📞 Support & Contact
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/honeypot/issues)
+- **Issues**: [GitHub Issues](https://github.com/youssefhalawa/network-honeypot/issues)
 - **Questions**: See documentation in `docs/` folder
 - **Security**: Report vulnerabilities responsibly via GitHub Security tab
 
@@ -506,6 +506,6 @@ MIT License - See LICENSE file
 
 **⚠️ Use Responsibly | 🔒 Handle Captured Data Securely | 📊 Share Threat Intel with Community**
 
-Made with ❤️ for the security research community
+Made with DEPI GPT for the security research community
 
 </div>
